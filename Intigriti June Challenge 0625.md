@@ -7,8 +7,8 @@ Beginning with the login page, we can observe in the dev tools that we have two 
 <br><br>
 After downloading the source code from the challenge website, we start analyzing the code : 
 Following is the code for dockerfile : 
-```FROM python:3.13-slim
-
+```
+FROM python:3.13-slim
 
 RUN apt-get update && \
     apt-get install -y wget unzip curl && \
@@ -47,12 +47,12 @@ USER appuser
 CMD ["python3", "app.py"]
 ```
 So the flag is stored in a file with randomized file name.
-On reviewing the utils.py file, we observe that we can upload any file but the filename is being sanitized : 
+On reviewing the utils.py file, we observe that we can upload any file but the filename is being sanitized.
 ```
 def sanitize_filename(filename):
     return re.sub(r'[^A-Za-z0-9_/]', '', filename)
 ```
-Similarly username is also sanitized :
+Similarly username is also sanitized but since '.' are allowed, we'll see later on that this can be used in path traversal.
 ```
 def sanitize_username(username):
     return re.sub(r'[^A-Za-z0-9_.-]', '', username)
@@ -100,5 +100,8 @@ The get_or_create_instance_id function is defined in the instance_manager.py fil
     
     return instance_id
 ```
-So basically before every request, the code uses the get_or_create_instance_id function to get the instance_id from browser cookies and matches it with the instance tied to the session cookie. If they don't match, the user is logged out. In the get_or_create_instance_id function, it is checked whether the path of instance_dir exists or not. If it does not exists, then a directory corresponding to the current instance is created with two sub-directories - "notes" and "chrome-profile". The instance_dir variable has the path based on INSTANCE_DIR(variable defined in config.py as cwd/instances) and the instance_id.<br>
-Here we can spot that the instance_id is not sanitized. So since it is used in directory creation, there is a potential path traversal vulnerability. We can set the "INSTANCE" cookie as '..' or something else and delete the session cookie to ensure that the a new session cookie is generated corresponding to the "INSTANCE" cookie. 
+So basically before every request, the code uses the get_or_create_instance_id function to get the instance_id from browser cookies and matches it with the instance tied to the session cookie. If they don't match, the user is logged out. In the get_or_create_instance_id function, it is checked whether the path of instance_dir exists or not. If it does not exists, then a directory corresponding to the current instance is created with two sub-directories - "notes" and "chrome-profile". The instance_dir variable has the path based on INSTANCE_DIR(variable defined in config.py as cwd/instances) and the instance_id.<br><br>
+Here we can spot that the instance_id is not sanitized. So since it is used in directory creation, there is a potential path traversal vulnerability. We can set the "INSTANCE" cookie as '..' or something else and delete the session cookie to ensure that there is no instance associated with the current session.
+<br>
+<br>
+Next checking out the utils.py file, we see the function setting up chromium settings for the bot. Interesting thing to note here is the `chrome_options.add_argument(f"--user-data-dir={get_instance_path(instance_id, 'chrome_profile')}")` line. In chromium, "--user-data-dir" flag allows you to specify a custom location for the user data directory, which contain files related to a individual chromium profile. 
