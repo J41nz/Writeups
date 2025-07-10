@@ -3,8 +3,6 @@ The challenge requires us to gain RCE on the server. The given web application i
 ## Analyzing the web application
 Beginning with the login page, we can observe in the dev tools that we have two cookies stored which are- "INSTANCE" and session cookie. On logging in, the page is updated without changing the URL, since it is a single-page web application based on Vue.js.
 <br><br>
-![Image](https://github.com/user-attachments/assets/2dadff4e-5efd-419c-b4e4-b2005c5c30ba)
-<br><br>
 After downloading the source code from the challenge website, we start analyzing the code : 
 Following is the code for dockerfile : 
 ```
