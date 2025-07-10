@@ -1,8 +1,8 @@
 # Intigriti June Challenge 0625 - writeup
-The challenge requires us to gain RCE on the server. The given web application is basically a notes app where we can login to store notes, upload files and also report urls to a bot. Here's the link to the challenge : https://challenge-0625.intigriti.io/
+The challenge requires us to gain RCE on the server. The given web application is basically a notes app where we can login to store notes, upload files and also report URLs to a bot. Here's the link to the challenge : https://challenge-0625.intigriti.io/
 ## Analyzing the web application
-Beginning with the login page, we can observe in the dev tools that we have two cookies stored which are- "INSTANCE" and session cookie. On logging in, the page is updated without changing the URL, since it is a single-page web application based on Vue.js.
-<br><br>
+Beginning with the login page, we can observe in the dev tools that we have two cookies stored which are- "INSTANCE" and session cookie. On logging in, the page is updated without changing the URL, since it is a single-page web application based on Vue.js. After logging in, we get access to functionality to upload our notes, upload files, download the uploaded files and report URLs to a bot. An observation here on downloading the files we have uploaded, dots were removed from the filename which suggests sanitization.
+## Analyzing the source code
 After downloading the source code from the challenge website, we start analyzing the code : 
 Following is the code for dockerfile : 
 ```
@@ -55,7 +55,7 @@ Similarly username is also sanitized but since '.' are allowed, we'll see later 
 def sanitize_username(username):
     return re.sub(r'[^A-Za-z0-9_.-]', '', username)
 ```
-After that, on reading the app.py file, we understand how the instance cookie is being managed.
+After that, on reading the app.py file, we understand how the instance_id is being managed.
 ```
 @app.before_request
 def before_request():
@@ -98,9 +98,9 @@ The get_or_create_instance_id function is defined in the instance_manager.py fil
     
     return instance_id
 ```
-### Quick summary of instance_id working 
-So basically before every request, the code uses the get_or_create_instance_id function to get the instance_id from browser cookies and matches it with the instance tied to the session cookie. If they don't match, the user is logged out. In the get_or_create_instance_id function, it is checked whether the path of instance_dir exists or not. If it does not exists, then a directory corresponding to the current instance is created with two sub-directories - "notes" and "chrome-profile". The instance_dir variable has the path based on INSTANCE_DIR(variable defined in config.py as cwd/instances) and the instance_id.<br><br>
-Here we can spot that the instance_id is not sanitized. So since it is used in directory creation, there is a potential path traversal vulnerability. We can set the "INSTANCE" cookie as '..' or something else and delete the session cookie to ensure that there is no instance associated with the current session.<br>
+### Quick summary of instance_id functionality 
+So basically before every request, the code uses the get_or_create_instance_id function to get the instance_id from either the one tied with session or the INSTANCE cookie and if none exists then it creates a random one. Then the instance_id variable is compared with the instance id tied with session cookie and if they are not equal then the user is logged out. Note here that if there is no session cookie then functionality will be normal and user will not be logged out.<br><br>
+Here we can spot that the **instance_id is not sanitized**. So since it is used in directory creation, there is a potential path traversal vulnerability. We can set the "INSTANCE" cookie as any arbitrary value which we'll later see will help in overwriting a file using the given file upload functionality.<br>
 ### Uploading arbitrary files on the server
 Next checking out the utils.py file, we see the function setting up chromium settings for the bot. Interesting thing to note here is the `chrome_options.add_argument(f"--user-data-dir={get_instance_path(instance_id, 'chrome_profile')}")` line. In chromium, "--user-data-dir" flag allows you to specify a custom location for the user data directory, which contain files related to a individual chromium profile. As this is based on the instance_id value which is not sanitized, we can use path traversal to overwrite default chromium preferences file for some other instance id. This can help us in the following way - We can change the preferences and set startup url for the browser as link to our webhook. In our webhook response, we can set the content type to application/octet-stream so that instead of loading, the file gets downloaded. Hence we can upload any arbitrary file on the server in any directory (by changing the default downloading directory while overwriting the preferences file).
 ## Exploitation using ChromeDriver port 
